@@ -1,0 +1,33 @@
+services:
+  shpr-db:
+    container_name: shpr-db
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: Password123
+      POSTGRES_DB: shpr
+    volumes:
+      - shpr-pgdata:/var/lib/postgresql/data
+    networks:
+      - shpr
+
+  shpr:
+    container_name: shpr
+    image: shpr:latest
+    environment:
+      FLASK_ENV: production
+      SQLALCHEMY_DATABASE_URI: postgresql://user:Password123@shpr-db:5432/shpr # Update with user:Password from shpr-db
+
+      SECRET_KEY: REPLACE # https://flask.palletsprojects.com/en/stable/config/#SECRET_KEY
+    ports:
+      - "7477:7477"
+    depends_on:
+      - shpr-db
+    networks:
+      - shpr
+
+volumes:
+  shpr-pgdata:
+networks:
+  shpr:

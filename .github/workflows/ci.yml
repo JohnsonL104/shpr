@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: Password123
+          POSTGRES_DB: shpr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U user -d shpr_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Extract and Validate Version
+        id: validate_version
+        run: |
+          VERSION=$(grep '^version =' pyproject.toml | sed -E "s/version = \"([^\"]+)\"/\\1/")
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format: $VERSION. Expected format: X.Y"
+            exit 1
+          fi
+          git fetch --tags > /dev/null
+          if [[ -n $(git tag --list "v$VERSION") ]]; then
+            echo "Version $VERSION already exists as a Git tag."
+            exit 1
+          fi
+          echo "Extracted version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.13
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install '.[test]'
+
+      - name: Run Ruff Linter
+        run: |
+          ruff check .
+
+      - name: Run tests
+        env:
+          SQLALCHEMY_DATABASE_URI: postgresql://user:Password123@localhost:5432/shpr_test
+        run: |
+          coverage run -m pytest
+          coverage html
+      - name: Upload test coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov
+
+      - name: Build release notes
+        id: build_release_notes
+        run: |
+          VERSION=${{ env.VERSION }}
+          IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          BUILD_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          # Extract the release notes for the current version
+          awk -v version="$VERSION" '
+            BEGIN { found=0 }
+            $0 ~ "^## \\[" version "\\] - " { found=1; next }
+            $0 ~ "^## \\[" && found { exit }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+          
+          # Append a new line, Docker image, and build URL to the release notes
+          echo "" >> release_notes.md
+          echo "Docker image available at: \`docker pull $IMAGE_NAME:$VERSION\`" >> release_notes.md
+          echo "Build URL: [View Build](${BUILD_URL})" >> release_notes.md
+          
+          echo "Release notes extracted for version $VERSION"
+          cat release_notes.md
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release_notes.md
+
+      - name: Test Docker image build
+        run: |
+          IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE_NAME:test .
+
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: .
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version =' pyproject.toml | sed -E "s/version = \"([^\"]+)\"/\\1/")
+          echo "Extracted version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Build and push Docker image
+        env:
+          VERSION: ${{ env.VERSION }}
+        run: |
+          echo "Building Docker image with version: $VERSION"
+          IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE_NAME:latest -t $IMAGE_NAME:$VERSION .
+          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:$VERSION
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+
+      - name: Tag the commit with the version
+        run: |
+          VERSION=${{ env.VERSION }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "Release version $VERSION"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ env.VERSION }}"
+          release_name: "Release v${{ env.VERSION }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: false

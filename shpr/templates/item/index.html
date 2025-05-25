@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block header %}
+    <div style="display: none;">{% block title %}Shopping List{% endblock %}</div>
+    <header>
+      <form id="filter-form" class="filter-form" method="get">
+        <input
+          class="username-filter"
+          type="text"
+          name="username"
+          placeholder="Search by Username"
+          value="{{ request.args.get('username', '') }}"
+        />
+        <select name="status" class="status-filter">
+          <option value="requested" {% if request.args.get('status', 'requested') == 'requested' %}selected{% endif %}>Requested</option>
+          <option value="completed" {% if request.args.get('status') == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="all" {% if request.args.get('status') == 'all' %}selected{% endif %}>All</option>
+        </select>
+      </form>
+    </header>
+{% endblock %}
+
+{% block content %}
+  <div class="items">
+    {% if not items %}
+      <div class="empty">Shopping list empty :)</div>
+    {% endif %}
+    {% for item in items %}
+    {% if g.user and not item.completed_by_id %}
+      <div class="item swipe-item" data-id="{{ item['id'] }}">
+    {% else %}
+      <div class="item">
+    {% endif %}
+        <div class="left">
+          <div class="about">
+            Requested for {{ item['requestor'] }} on {{ item['created'].strftime('%Y-%m-%d') }}
+          </div>
+          <div class="description">
+            <p>{{ item['description'] }}</p>
+          </div>
+          {% if item['completed_by_id'] %}
+            <div class="completed">
+              Completed on {{ item['completed_date'].strftime('%Y-%m-%d') }} by {{ item['completed_by'] }}
+            </div>
+          {% endif %}
+        </div>
+        <div class="right">
+          {% if g.user['id'] == item['requestor_id'] %}
+            <a class="action" href="{{ url_for('item.update', id=item['id']) }}" title="Edit">
+              <i class="fas fa-edit"></i>
+            </a>
+          {% endif %}
+          {% if item['link'] %}
+            <a class="action" target="_blank" href="{{ item['link'] }}" title="{{ item['link'] }}">
+              <i class="fas fa-link"></i>
+            </a>
+          {% endif %}
+          {% if g.user and not item.completed_by_id and not is_mobile %}
+            <a class="action complete-button" title="Complete">
+              <i class="fas fa-check"></i>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% if g.user %}
+    <a class="new-button" href="{{ url_for('item.create') }}" title="Add new item">
+      <i class="fas fa-plus"></i>
+    </a>
+  {% endif %}
+  <script src="{{ url_for('static', filename='js/swipe.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/filter.js') }}"></script>
+{% endblock %}
