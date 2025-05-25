@@ -1,0 +1,10 @@
+services:
+  test-shpr-db:
+    container_name: test-shpr-db
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: Password123
+      POSTGRES_DB: shpr_test
+    network_mode: host

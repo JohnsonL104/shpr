@@ -1,0 +1,47 @@
+[project]
+name = "shpr"
+version = "1.0"
+description = "A simple shopping list web application"
+readme = "README.md"
+license = {file = "LICENSE.txt"}
+maintainers = [{name = "Lucas Johnson"}]
+classifiers = ["Private :: Do Not Upload"]
+dependencies = [
+    "flask",
+    "sqlalchemy",
+    "flask_sqlalchemy",
+    "psycopg2-binary"
+]
+
+[project.urls]
+GitHub = "https://github.com/JohnsonL104/shpr"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "coverage",
+    "ruff"
+]
+
+[build-system]
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "shpr"
+
+[tool.flit.sdist]
+include = [
+    "tests/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["shpr", "tests"]
+
+[tool.ruff]
+src = ["shpr"]

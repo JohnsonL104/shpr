@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block header %}
+  <header>
+    <h1>{% block title %}Edit Item{% endblock %}</h1>
+    <div class="header-buttons">
+      <form method="post">
+        <button type="submit" form="item-form">
+          <i class="fas fa-save"></i>
+        </button>
+      </form>
+      <form action="{{ url_for('item.delete', id=item['id']) }}" method="post">
+        <button class="danger" type="submit" value="Delete" onclick="return confirm('Are you sure?');">
+            <i class="fas fa-trash"></i>
+        </button>
+      </form>
+    </div>
+  </header>
+{% endblock %}
+
+{% block content %}
+  <form id="item-form" method="post">
+    <label for="description">Item Description</label>
+    <textarea name="description" id="description" required>{{ request.form['description'] or item['description'] }}</textarea>
+    
+    <label for="link">Link to Item (Optional)</label>
+    <input name="link" id="link" value="{{ request.form['link'] or item['link'] }}">
+  </form>
+  <hr>
+{% endblock %}
